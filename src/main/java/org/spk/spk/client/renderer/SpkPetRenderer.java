@@ -1,7 +1,5 @@
 package org.spk.spk.client.renderer;
 
-import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.MobRenderer;
 import net.minecraft.resources.ResourceLocation;
@@ -16,13 +14,6 @@ public class SpkPetRenderer extends MobRenderer<SpkPetEntity, SpkPetModel<SpkPet
 
     public SpkPetRenderer(EntityRendererProvider.Context context) {
         super(context, new SpkPetModel<>(context.bakeLayer(SpkPetModel.LAYER_LOCATION)), 0.4F);
-    }
-
-    @Override
-    protected void setupRotations(SpkPetEntity entity, PoseStack poseStack, float ageInTicks, float rotationYaw, float partialTicks) {
-        super.setupRotations(entity, poseStack, ageInTicks, rotationYaw, partialTicks);
-        // Blockbench モデルの頭が +Z（South）向きで作られているため、Minecraft の前進方向（-Z）に合わせて 180 度回転
-        poseStack.mulPose(Axis.YP.rotationDegrees(180.0F));
     }
 
     @Override
