@@ -72,15 +72,17 @@ public class Spk {
 
     // ---- スポーンエッグ ----
     // 色：外側 0xC0A060（茶系）、内側 0xFFFFFF（白）
+    // ForgeSpawnEggItem を使い、Supplier<EntityType> を遅延評価で渡す（ITEMS 登録時に SPK_PET が未登録のため）
     public static final RegistryObject<Item> SPK_PET_SPAWN_EGG = ITEMS.register(
             "spk_pet_spawn_egg",
-            () -> new SpawnEggItem(SPK_PET.get(), 0xC0A060, 0xFFFFFF, new Item.Properties())
+            () -> new net.minecraftforge.common.ForgeSpawnEggItem(SPK_PET, 0xC0A060, 0xFFFFFF, new Item.Properties())
     );
 
     public Spk() {
         IEventBus modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
 
         modEventBus.addListener(this::commonSetup);
+        modEventBus.addListener(this::registerAttributes);
 
         BLOCKS.register(modEventBus);
         ITEMS.register(modEventBus);
@@ -92,6 +94,10 @@ public class Spk {
         modEventBus.addListener(this::addCreative);
 
         ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, Config.SPEC);
+    }
+
+    private void registerAttributes(net.minecraftforge.event.entity.EntityAttributeCreationEvent event) {
+        event.put(SPK_PET.get(), SpkPetEntity.createAttributes().build());
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
@@ -107,7 +113,7 @@ public class Spk {
 
     private void addCreative(BuildCreativeModeTabContentsEvent event) {
         if (event.getTabKey() == CreativeModeTabs.BUILDING_BLOCKS) event.accept(EXAMPLE_BLOCK_ITEM);
-        // スポーンエッグは MISC タブに自動登録される（SpawnEggItem の仕様）
+        if (event.getTabKey() == CreativeModeTabs.SPAWN_EGGS) event.accept(SPK_PET_SPAWN_EGG);
     }
 
     @SubscribeEvent
