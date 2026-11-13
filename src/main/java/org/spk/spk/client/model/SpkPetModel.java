@@ -91,18 +91,18 @@ public class SpkPetModel<T extends SpkPetEntity> extends EntityModel<T> {
     public void setupAnim(T entity, float limbSwing, float limbSwingAmount,
                           float ageInTicks, float netHeadYaw, float headPitch) {
 
-        // 頭の向き
-        this.heads.yRot = netHeadYaw  * Mth.DEG_TO_RAD;
-        this.heads.xRot = headPitch   * Mth.DEG_TO_RAD;
+        // モデル全体を 180 度回転させたため、頭のヨー・ピッチの符号を反転
+        this.heads.yRot = -netHeadYaw * Mth.DEG_TO_RAD;
+        this.heads.xRot = -headPitch  * Mth.DEG_TO_RAD;
 
-        // 歩行アニメーション
+        // 歩行アニメーション（前脚が進行方向へ自然に振り出されるよう調整）
         // 前脚：互い違いに前後
-        this.leg_F_right.xRot =  Mth.cos(limbSwing * 0.6662F)       * 1.4F * limbSwingAmount;
-        this.leg_F_left.xRot  =  Mth.cos(limbSwing * 0.6662F + Mth.PI) * 1.4F * limbSwingAmount;
+        this.leg_F_right.xRot = -Mth.cos(limbSwing * 0.6662F)            * 1.4F * limbSwingAmount;
+        this.leg_F_left.xRot  = -Mth.cos(limbSwing * 0.6662F + Mth.PI)   * 1.4F * limbSwingAmount;
 
         // 後脚（bone = 右, bone2 = 左）
-        this.bone.xRot  =  Mth.cos(limbSwing * 0.6662F + Mth.PI) * 1.4F * limbSwingAmount;
-        this.bone2.xRot =  Mth.cos(limbSwing * 0.6662F)          * 1.4F * limbSwingAmount;
+        this.bone.xRot  = -Mth.cos(limbSwing * 0.6662F + Mth.PI) * 1.4F * limbSwingAmount;
+        this.bone2.xRot = -Mth.cos(limbSwing * 0.6662F)          * 1.4F * limbSwingAmount;
     }
 
     // ---- renderToBuffer ----
