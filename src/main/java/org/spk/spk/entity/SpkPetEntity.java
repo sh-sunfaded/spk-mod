@@ -1,5 +1,7 @@
 package org.spk.spk.entity;
 
+import net.minecraft.core.particles.DustParticleOptions;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvent;
@@ -30,6 +32,7 @@ import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.gameevent.GameEvent;
 import net.minecraftforge.event.ForgeEventFactory;
+import org.joml.Vector3f;
 
 import javax.annotation.Nullable;
 
@@ -41,6 +44,11 @@ public class SpkPetEntity extends TamableAnimal {
 
     // --- 餌付け・誘引アイテム（カボチャ / くり抜かれたカボチャ） ---
     private static final Ingredient TEMPT_INGREDIENT = Ingredient.of(Items.PUMPKIN, Items.CARVED_PUMPKIN);
+
+    // --- 虹色スピン演出用定数 ---
+    public static final byte EVENT_RAINBOW_SPIN = 68;
+    private static final int RAINBOW_SPIN_DURATION = 60; // 3秒間 (60 ticks)
+    private int rainbowSpinTicks = 0;
 
     public SpkPetEntity(EntityType<? extends SpkPetEntity> type, Level level) {
         super(type, level);
@@ -100,29 +108,83 @@ public class SpkPetEntity extends TamableAnimal {
     }
 
     // ----------------------------------------------------------------
-    //  インタラクション：カボチャでテイム / 餌 HP 回復
+    //  虹色スピンイベントの発火・管理
+    // ----------------------------------------------------------------
+    public void triggerRainbowSpin() {
+        this.rainbowSpinTicks = RAINBOW_SPIN_DURATION;
+        if (!this.level().isClientSide) {
+            this.level().broadcastEntityEvent(this, EVENT_RAINBOW_SPIN);
+            this.navigation.stop();
+        }
+    }
+
+    public boolean isRainbowSpinning() {
+        return this.rainbowSpinTicks > 0;
+    }
+
+    public int getRainbowSpinTicks() {
+        return this.rainbowSpinTicks;
+    }
+
+    @Override
+    public void handleEntityEvent(byte id) {
+        if (id == EVENT_RAINBOW_SPIN) {
+            this.triggerRainbowSpin();
+        } else {
+            super.handleEntityEvent(id);
+        }
+    }
+
+    @Override
+    public void aiStep() {
+        super.aiStep();
+        if (this.rainbowSpinTicks > 0) {
+            this.rainbowSpinTicks--;
+            if (this.level().isClientSide) {
+                // クライアント側：虹色 Dust パーティクルとグローパーティクルをキラキラ放出
+                float hue = ((this.tickCount * 12.0F) % 360.0F) / 360.0F;
+                float[] rgb = hsvToRgb(hue, 1.0F, 1.0F);
+                double px = this.getX() + (this.random.nextDouble() - 0.5D) * this.getBbWidth() * 1.6D;
+                double py = this.getY() + this.random.nextDouble() * this.getBbHeight() + 0.2D;
+                double pz = this.getZ() + (this.random.nextDouble() - 0.5D) * this.getBbWidth() * 1.6D;
+                this.level().addParticle(new DustParticleOptions(new Vector3f(rgb[0], rgb[1], rgb[2]), 1.2F),
+                        px, py, pz, 0.0D, 0.06D, 0.0D);
+                if (this.random.nextFloat() < 0.35F) {
+                    this.level().addParticle(ParticleTypes.GLOW, px, py, pz, 0.0D, 0.03D, 0.0D);
+                }
+            }
+        }
+    }
+
+    // ----------------------------------------------------------------
+    //  インタラクション：カボチャでテイム / 虹色スピン発火
     // ----------------------------------------------------------------
     @Override
     public InteractionResult mobInteract(Player player, InteractionHand hand) {
         ItemStack stack = player.getItemInHand(hand);
 
         if (this.level().isClientSide) {
-            // クライアント側：ハート/煙パーティクル表示のためには true を返す必要あり
-            boolean willInteract = this.isOwnedBy(player)
+            // クライアント側：テイム済み時のカボチャ、または野生時のカボチャで腕振り＆イベントトリガー
+            boolean willInteract = (this.isOwnedBy(player) && isPumpkin(stack))
+                    || (this.isOwnedBy(player) && this.isFood(stack) && this.getHealth() < this.getMaxHealth())
                     || (isPumpkin(stack) && !this.isTame());
             return willInteract ? InteractionResult.CONSUME : InteractionResult.PASS;
         }
 
         // --- テイム済み ---
         if (this.isTame()) {
-            // カボチャで HP 回復（4.0F 回復）
-            if (isPumpkin(stack) && this.getHealth() < this.getMaxHealth()) {
-                this.heal(4.0F);
+            // カボチャを与える：HPの成否にかかわらず常に消費して虹色スピンイベントを発火！
+            if (isPumpkin(stack) && this.isOwnedBy(player)) {
+                if (this.getHealth() < this.getMaxHealth()) {
+                    this.heal(4.0F);
+                }
                 if (!player.getAbilities().instabuild) {
                     stack.shrink(1);
                 }
                 this.gameEvent(GameEvent.EAT, this);
                 this.playSound(SoundEvents.GENERIC_EAT, 1.0F, 1.0F);
+                this.playSound(SoundEvents.AMETHYST_BLOCK_CHIME, 1.0F, 1.5F);
+                this.triggerRainbowSpin();
                 return InteractionResult.SUCCESS;
             }
 
@@ -148,17 +210,42 @@ public class SpkPetEntity extends TamableAnimal {
             }
             if (this.random.nextInt(3) == 0
                     && !ForgeEventFactory.onAnimalTame(this, player)) {
+                // 餌付け成功！
                 this.tame(player);
                 this.navigation.stop();
                 this.setTarget(null);
                 this.level().broadcastEntityEvent(this, (byte) 7); // ハートパーティクル
+                this.playSound(SoundEvents.AMETHYST_BLOCK_CHIME, 1.0F, 1.5F);
+                this.triggerRainbowSpin(); // 成功時のみ虹色スピンイベント発火！
             } else {
+                // 餌付け失敗（このイベントは行われない）
                 this.level().broadcastEntityEvent(this, (byte) 6); // 煙パーティクル
             }
             return InteractionResult.SUCCESS;
         }
 
         return super.mobInteract(player, hand);
+    }
+
+    // ----------------------------------------------------------------
+    //  HSV -> RGB 変換ユーティリティ
+    // ----------------------------------------------------------------
+    public static float[] hsvToRgb(float hue, float saturation, float value) {
+        int h = (int)(hue * 6.0F);
+        float f = hue * 6.0F - (float)h;
+        float p = value * (1.0F - saturation);
+        float q = value * (1.0F - f * saturation);
+        float t = value * (1.0F - (1.0F - f) * saturation);
+
+        return switch (h % 6) {
+            case 0 -> new float[]{value, t, p};
+            case 1 -> new float[]{q, value, p};
+            case 2 -> new float[]{p, value, t};
+            case 3 -> new float[]{p, q, value};
+            case 4 -> new float[]{t, p, value};
+            case 5 -> new float[]{value, p, q};
+            default -> new float[]{1.0F, 1.0F, 1.0F};
+        };
     }
 
     // ----------------------------------------------------------------
