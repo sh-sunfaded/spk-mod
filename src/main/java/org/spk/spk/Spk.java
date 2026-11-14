@@ -83,6 +83,7 @@ public class Spk {
 
         modEventBus.addListener(this::commonSetup);
         modEventBus.addListener(this::registerAttributes);
+        modEventBus.addListener(this::registerSpawnPlacements);
 
         BLOCKS.register(modEventBus);
         ITEMS.register(modEventBus);
@@ -98,6 +99,16 @@ public class Spk {
 
     private void registerAttributes(net.minecraftforge.event.entity.EntityAttributeCreationEvent event) {
         event.put(SPK_PET.get(), SpkPetEntity.createAttributes().build());
+    }
+
+    private void registerSpawnPlacements(net.minecraftforge.event.entity.SpawnPlacementRegisterEvent event) {
+        event.register(
+                SPK_PET.get(),
+                net.minecraft.world.entity.SpawnPlacements.Type.ON_GROUND,
+                net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                SpkPetEntity::checkSpkPetSpawnRules,
+                net.minecraftforge.event.entity.SpawnPlacementRegisterEvent.Operation.OR
+        );
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {

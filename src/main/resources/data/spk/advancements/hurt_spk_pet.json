@@ -1,0 +1,39 @@
+{
+  "display": {
+    "icon": {
+      "item": "spk:spk_pet_spawn_egg"
+    },
+    "title": {
+      "text": "ｽﾋﾟｷｦｲｼﾞﾒﾇﾝﾃﾞ"
+    },
+    "description": {
+      "text": "Spkペットにダメージを与える"
+    },
+    "frame": "task",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false,
+    "background": "minecraft:textures/gui/advancements/backgrounds/adventure.png"
+  },
+  "criteria": {
+    "hurt_spk_pet": {
+      "trigger": "minecraft:player_hurt_entity",
+      "conditions": {
+        "entity": [
+          {
+            "condition": "minecraft:entity_properties",
+            "entity": "this",
+            "predicate": {
+              "type": "spk:spk_pet"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "requirements": [
+    [
+      "hurt_spk_pet"
+    ]
+  ]
+}

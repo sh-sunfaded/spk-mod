@@ -62,6 +62,58 @@ public class SpkPetEntity extends TamableAnimal {
     }
 
     // ----------------------------------------------------------------
+    //  野生スポーンルール：日中の外、地面、カボチャの周囲
+    // ----------------------------------------------------------------
+    public static boolean checkSpkPetSpawnRules(
+            EntityType<SpkPetEntity> entityType,
+            net.minecraft.world.level.LevelAccessor level,
+            net.minecraft.world.entity.MobSpawnType spawnType,
+            net.minecraft.core.BlockPos pos,
+            net.minecraft.util.RandomSource random) {
+
+        // スポーンエッグやコマンドの場合は常に許可
+        if (spawnType == net.minecraft.world.entity.MobSpawnType.SPAWN_EGG
+                || spawnType == net.minecraft.world.entity.MobSpawnType.COMMAND) {
+            return true;
+        }
+
+        // 外（空が見える）
+        if (!level.canSeeSky(pos)) {
+            return false;
+        }
+
+        // 日中（昼間：暗くない）
+        if (level.getSkyDarken() >= 4) {
+            return false;
+        }
+
+        // 明るさ十分
+        if (level.getRawBrightness(pos, 0) <= 8) {
+            return false;
+        }
+
+        // 地面が動物スポーン可能ブロック（草ブロック等）
+        if (!level.getBlockState(pos.below()).is(net.minecraft.tags.BlockTags.ANIMALS_SPAWNABLE_ON)) {
+            return false;
+        }
+
+        // カボチャの周り（周囲12ブロック、上下4ブロック以内にカボチャがあるか）
+        int radius = 12;
+        int yRadius = 4;
+        for (net.minecraft.core.BlockPos checkPos : net.minecraft.core.BlockPos.betweenClosed(
+                pos.offset(-radius, -yRadius, -radius),
+                pos.offset(radius, yRadius, radius))) {
+            net.minecraft.world.level.block.state.BlockState state = level.getBlockState(checkPos);
+            if (state.is(net.minecraft.world.level.block.Blocks.PUMPKIN)
+                    || state.is(net.minecraft.world.level.block.Blocks.CARVED_PUMPKIN)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // ----------------------------------------------------------------
     //  属性
     // ----------------------------------------------------------------
     public static AttributeSupplier.Builder createAttributes() {
@@ -82,6 +134,8 @@ public class SpkPetEntity extends TamableAnimal {
         this.goalSelector.addGoal(3, new TemptGoal(this, 1.25D, TEMPT_INGREDIENT, false));
         this.goalSelector.addGoal(4, new MeleeAttackGoal(this, 1.0D, true));
         this.goalSelector.addGoal(5, new FollowOwnerGoal(this, 1.0D, 10.0F, 2.0F, false));
+        // カボチャの周りで行動（カボチャがなければ自由行動へ）
+        this.goalSelector.addGoal(7, new org.spk.spk.entity.ai.StayNearPumpkinGoal(this, 1.0D, 16, 4));
         this.goalSelector.addGoal(8, new WaterAvoidingRandomStrollGoal(this, 1.0D));
         this.goalSelector.addGoal(10, new LookAtPlayerGoal(this, Player.class, 8.0F));
         this.goalSelector.addGoal(10, new RandomLookAroundGoal(this));
