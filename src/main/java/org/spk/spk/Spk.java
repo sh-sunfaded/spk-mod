@@ -93,6 +93,10 @@ public class Spk {
             "entity.spk_pet.death_explode",
             () -> net.minecraft.sounds.SoundEvent.createVariableRangeEvent(new ResourceLocation(MODID, "entity.spk_pet.death_explode"))
     );
+    public static final RegistryObject<net.minecraft.sounds.SoundEvent> SPK_PET_SQUASH = SOUND_EVENTS.register(
+            "entity.spk_pet.squash",
+            () -> net.minecraft.sounds.SoundEvent.createVariableRangeEvent(new ResourceLocation(MODID, "entity.spk_pet.squash"))
+    );
 
     public Spk() {
         IEventBus modEventBus = FMLJavaModLoadingContext.get().getModEventBus();

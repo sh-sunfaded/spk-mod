@@ -240,6 +240,7 @@ public class SpkPetEntity extends TamableAnimal {
                 this.gameEvent(GameEvent.EAT, this);
                 this.playSound(SoundEvents.GENERIC_EAT, 1.0F, 1.0F);
                 this.playSound(SoundEvents.AMETHYST_BLOCK_CHIME, 1.0F, 1.5F);
+                this.playSound(Spk.SPK_PET_SQUASH.get(), 1.0F, 1.0F);
                 this.triggerRainbowSpin();
                 return InteractionResult.SUCCESS;
             }
@@ -272,6 +273,7 @@ public class SpkPetEntity extends TamableAnimal {
                 this.setTarget(null);
                 this.level().broadcastEntityEvent(this, (byte) 7); // ハートパーティクル
                 this.playSound(SoundEvents.AMETHYST_BLOCK_CHIME, 1.0F, 1.5F);
+                this.playSound(Spk.SPK_PET_SQUASH.get(), 1.0F, 1.0F);
                 this.triggerRainbowSpin(); // 成功時のみ虹色スピンイベント発火！
             } else {
                 // 餌付け失敗（このイベントは行われない）

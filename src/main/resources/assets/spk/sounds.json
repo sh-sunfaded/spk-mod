@@ -23,5 +23,12 @@
     "sounds": [
       "spk:death_bazeyo"
     ]
+  },
+  "entity.spk_pet.squash": {
+    "category": "neutral",
+    "subtitle": "subtitles.entity.spk_pet.squash",
+    "sounds": [
+      "spk:eat_squash"
+    ]
   }
 }
