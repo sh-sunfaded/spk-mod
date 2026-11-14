@@ -1,4 +1,7 @@
 {
   "entity.spk.spk_pet": "Spk Pet",
-  "item.spk.spk_pet_spawn_egg": "Spk Pet Spawn Egg"
+  "item.spk.spk_pet_spawn_egg": "Spk Pet Spawn Egg",
+  "subtitles.entity.spk_pet.ambient": "Spk Pet chirps",
+  "subtitles.entity.spk_pet.hurt": "Spk Pet hurts",
+  "subtitles.entity.spk_pet.death_explode": "Spk Pet explodes"
 }

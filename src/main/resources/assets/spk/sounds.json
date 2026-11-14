@@ -1,0 +1,27 @@
+{
+  "entity.spk_pet.ambient": {
+    "category": "neutral",
+    "subtitle": "subtitles.entity.spk_pet.ambient",
+    "sounds": [
+      "spk:ambient_sunbakochi",
+      "spk:ambient_murugorureziru",
+      "spk:ambient_chuayo"
+    ]
+  },
+  "entity.spk_pet.hurt": {
+    "category": "neutral",
+    "subtitle": "subtitles.entity.spk_pet.hurt",
+    "sounds": [
+      "spk:hurt_aau",
+      "spk:hurt_aau",
+      "spk:hurt_notviolence"
+    ]
+  },
+  "entity.spk_pet.death_explode": {
+    "category": "neutral",
+    "subtitle": "subtitles.entity.spk_pet.death_explode",
+    "sounds": [
+      "spk:death_bazeyo"
+    ]
+  }
+}

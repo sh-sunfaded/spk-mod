@@ -1,4 +1,7 @@
 {
   "entity.spk.spk_pet": "Spkペット",
-  "item.spk.spk_pet_spawn_egg": "Spkペットのスポーンエッグ"
+  "item.spk.spk_pet_spawn_egg": "Spkペットのスポーンエッグ",
+  "subtitles.entity.spk_pet.ambient": "Spkペットが鳴く",
+  "subtitles.entity.spk_pet.hurt": "Spkペットが傷つく",
+  "subtitles.entity.spk_pet.death_explode": "Spkペットが爆死する"
 }

@@ -3,6 +3,7 @@ package org.spk.spk;
 import com.mojang.logging.LogUtils;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.food.FoodProperties;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.CreativeModeTab;
@@ -52,6 +53,7 @@ public class Spk {
     public static final DeferredRegister<Item> ITEMS = DeferredRegister.create(ForgeRegistries.ITEMS, MODID);
     public static final DeferredRegister<CreativeModeTab> CREATIVE_MODE_TABS = DeferredRegister.create(Registries.CREATIVE_MODE_TAB, MODID);
     public static final DeferredRegister<EntityType<?>> ENTITY_TYPES = DeferredRegister.create(ForgeRegistries.ENTITY_TYPES, MODID);
+    public static final DeferredRegister<net.minecraft.sounds.SoundEvent> SOUND_EVENTS = DeferredRegister.create(ForgeRegistries.SOUND_EVENTS, MODID);
 
     // ---- 既存コンテンツ ----
     public static final RegistryObject<Block> EXAMPLE_BLOCK = BLOCKS.register("example_block", () -> new Block(BlockBehaviour.Properties.of().mapColor(MapColor.STONE)));
@@ -78,6 +80,20 @@ public class Spk {
             () -> new net.minecraftforge.common.ForgeSpawnEggItem(SPK_PET, 0xC0A060, 0xFFFFFF, new Item.Properties())
     );
 
+    // ---- サウンドイベント ----
+    public static final RegistryObject<net.minecraft.sounds.SoundEvent> SPK_PET_AMBIENT = SOUND_EVENTS.register(
+            "entity.spk_pet.ambient",
+            () -> net.minecraft.sounds.SoundEvent.createVariableRangeEvent(new ResourceLocation(MODID, "entity.spk_pet.ambient"))
+    );
+    public static final RegistryObject<net.minecraft.sounds.SoundEvent> SPK_PET_HURT = SOUND_EVENTS.register(
+            "entity.spk_pet.hurt",
+            () -> net.minecraft.sounds.SoundEvent.createVariableRangeEvent(new ResourceLocation(MODID, "entity.spk_pet.hurt"))
+    );
+    public static final RegistryObject<net.minecraft.sounds.SoundEvent> SPK_PET_DEATH_EXPLODE = SOUND_EVENTS.register(
+            "entity.spk_pet.death_explode",
+            () -> net.minecraft.sounds.SoundEvent.createVariableRangeEvent(new ResourceLocation(MODID, "entity.spk_pet.death_explode"))
+    );
+
     public Spk() {
         IEventBus modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
 
@@ -89,6 +105,7 @@ public class Spk {
         ITEMS.register(modEventBus);
         CREATIVE_MODE_TABS.register(modEventBus);
         ENTITY_TYPES.register(modEventBus);
+        SOUND_EVENTS.register(modEventBus);
 
         MinecraftForge.EVENT_BUS.register(this);
 
