@@ -181,10 +181,11 @@ public class Spk {
             return;
         }
 
+        // 野生 / テイム済みを問わず、近隣のスピキを登録対象にする
+        // （カボチャの習性は野生のスピキのもの。テイムの有無にかかわらず守りを担う）
         java.util.List<SpkPetEntity> pets = level.getEntitiesOfClass(
                 SpkPetEntity.class,
-                player.getBoundingBox().inflate(32.0D),
-                pet -> pet.isOwnedBy(player));
+                player.getBoundingBox().inflate(32.0D));
 
         SpkPetEntity nearest = null;
         double nearestDistSq = Double.MAX_VALUE;

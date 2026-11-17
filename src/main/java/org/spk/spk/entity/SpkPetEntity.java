@@ -10,6 +10,7 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.util.Mth;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.AgeableMob;
 import net.minecraft.world.entity.Entity;
@@ -36,6 +37,7 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.gameevent.GameEvent;
+import net.minecraft.world.phys.AABB;
 import net.minecraftforge.event.ForgeEventFactory;
 import org.joml.Vector3f;
 
@@ -57,9 +59,19 @@ public class SpkPetEntity extends TamableAnimal {
     private int rainbowSpinTicks = 0;
 
     // --- カボチャ攻撃モーション（Blockbench「ホバギ突進」）用定数 ---
+    // クライアント（SpkPetModel）と共有する
     public static final byte EVENT_PUMPKIN_ATTACK = 69;
     public static final float PUMPKIN_ATTACK_DURATION_TICKS = 41.0F; // 2.04167秒
+    public static final float PUMPKIN_APPEAR_TICK = 7.5F;            // カボチャ出現（0.375秒）
+    public static final float PUMPKIN_HIDE_TICK = 40.0F;             // カボチャ消失（2.0秒）
+    public static final float PUMPKIN_THRUST_START_Z = -1.1F;        // 突き出し開始（px）
+    public static final float PUMPKIN_THRUST_END_Z = -9.1F;          // 突き出し終了（px）
+    public static final float PUMPKIN_THRUST_END_TICK = 35.0F;       // 突き出し完了時刻
+    public static final float PUMPKIN_STRIKE_TICK = 10.0F;           // カボチャが届く打撃予定時刻
     private float pumpkinAttackStartTick = -PUMPKIN_ATTACK_DURATION_TICKS;
+    @Nullable
+    private LivingEntity pumpkinStrikeTarget = null; // カボチャで打つ予定の相手
+    private int pumpkinStrikeTick = 0;
 
     // --- ホバギ（カボチャ）登録 ---
     // スピキは近隣のカボチャの座標を記録する。ワールドに存在する限り保持され、
@@ -153,7 +165,13 @@ public class SpkPetEntity extends TamableAnimal {
         this.goalSelector.addGoal(1, new FloatGoal(this));
         // 手持ちカボチャに近づく (canScare = false: 急に動いても逃げない)
         this.goalSelector.addGoal(3, new TemptGoal(this, 1.25D, TEMPT_INGREDIENT, false));
-        this.goalSelector.addGoal(4, new MeleeAttackGoal(this, 1.0D, true));
+        this.goalSelector.addGoal(4, new MeleeAttackGoal(this, 1.0D, true) {
+            // カボチャ攻撃モーション（約2秒）と重ならないよう、打撃間隔を延ばす
+            @Override
+            protected int getAttackInterval() {
+                return 30;
+            }
+        });
         this.goalSelector.addGoal(5, new FollowOwnerGoal(this, 1.0D, 10.0F, 2.0F, false));
         // カボチャの周りで行動（カボチャがなければ自由行動へ）
         this.goalSelector.addGoal(7, new org.spk.spk.entity.ai.StayNearPumpkinGoal(this, 1.0D, 16, 4));
@@ -367,22 +385,65 @@ public class SpkPetEntity extends TamableAnimal {
 
     // ----------------------------------------------------------------
     //  近接攻撃：カボチャ突進モーションを再生（威力は狼の噛みつき相当）
+    //  当たり判定はカボチャ（モーションで前に突き出される位置）
     // ----------------------------------------------------------------
     @Override
     public boolean doHurtTarget(Entity target) {
-        if (!this.level().isClientSide) {
-            this.playSound(Spk.SPK_PET_SQUASH.get(), 1.0F, 0.8F);
-            this.triggerPumpkinAttack();
+        if (this.level().isClientSide) {
+            return false;
         }
-        return super.doHurtTarget(target);
+        this.playSound(Spk.SPK_PET_SQUASH.get(), 1.0F, 0.8F);
+        this.triggerPumpkinAttack();
+        // 打撃はカボチャが出現して届いた瞬間（aiStep）に判定する
+        if (target instanceof LivingEntity living) {
+            this.pumpkinStrikeTarget = living;
+            this.pumpkinStrikeTick = (int) (this.pumpkinAttackStartTick + PUMPKIN_STRIKE_TICK);
+        }
+        return false;
+    }
+
+    /**
+     * 攻撃モーション中のカボチャの当たり判定（ワールド座標）。
+     * モーション中でない / カボチャがまだ出ていない場合は null。
+     */
+    @Nullable
+    public AABB getPumpkinHitbox() {
+        float t = this.tickCount - this.pumpkinAttackStartTick;
+        if (t < PUMPKIN_APPEAR_TICK || t >= PUMPKIN_HIDE_TICK) {
+            return null;
+        }
+        // 突き出し（px）の進行: 0 → PUMPKIN_THRUST_END_TICK で z を進める
+        float zf = Mth.lerp(Math.min(t / PUMPKIN_THRUST_END_TICK, 1.0F),
+                PUMPKIN_THRUST_START_Z, PUMPKIN_THRUST_END_Z);
+        double origin = -0.6D + zf;                                       // pumpkin ボーンのz（px）
+        double fwd = (-origin - 2.0D) / 16.0D;                             // スピキ中心からカボチャ中心までの前方距離
+        float yawRad = this.yBodyRot * ((float) Math.PI / 180.0F);
+        double cx = this.getX() - Math.sin(yawRad) * fwd;
+        double cz = this.getZ() + Math.cos(yawRad) * fwd;
+        double cy = this.getY() + 0.35D;
+        return new AABB(cx - 0.25D, cy - 0.35D, cz - 0.25D,
+                        cx + 0.25D, cy + 0.35D, cz + 0.25D);
     }
 
     @Override
     public void aiStep() {
         super.aiStep();
         // 登録の維持：消えたカボチャの記録破棄 + 近隣カボチャの自動記録（5秒毎）
-        if (!this.level().isClientSide && this.isTame() && this.tickCount % 100 == 0) {
+        if (!this.level().isClientSide && this.tickCount % 100 == 0) {
             this.maintainPumpkinRegistrations();
+        }
+        // カボチャの一撃：カボチャが届いた瞬間にダメージを与える
+        if (!this.level().isClientSide && this.pumpkinStrikeTarget != null && this.tickCount >= this.pumpkinStrikeTick) {
+            LivingEntity strikeTarget = this.pumpkinStrikeTarget;
+            this.pumpkinStrikeTarget = null;
+            AABB pumpkinBox = this.getPumpkinHitbox();
+            if (pumpkinBox != null && strikeTarget.isAlive() && !strikeTarget.isRemoved()
+                    && pumpkinBox.intersects(strikeTarget.getBoundingBox())) {
+                if (strikeTarget.hurt(this.damageSources().mobAttack(this),
+                        (float) ((int) this.getAttributeValue(Attributes.ATTACK_DAMAGE)))) {
+                    this.doEnchantDamageEffects(this, strikeTarget);
+                }
+            }
         }
         if (this.rainbowSpinTicks > 0) {
             this.rainbowSpinTicks--;

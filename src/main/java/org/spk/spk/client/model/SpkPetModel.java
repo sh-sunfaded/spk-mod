@@ -131,11 +131,10 @@ public class SpkPetModel<T extends SpkPetEntity> extends EntityModel<T> {
     private static final float[] ALL_POS_Z_VALS  = {0.0F, 0.0F, 0.0F, 0.0F, 10.8F, 20.1F};
 
     // pumpkin: 手元に出現（0.375秒後）して前に突き出し、終了時（2秒）に消える
-    private static final float[] PUMPKIN_POS_Z_TICKS = {0.0F, 35.0F};
-    private static final float[] PUMPKIN_POS_Z_VALS  = {-1.1F, -9.1F};
-    private static final float PUMPKIN_APPEAR_TICK = 7.5F;
-    private static final float PUMPKIN_HIDE_TICK   = 40.0F;
-    private static final float PUMPKIN_SCALE       = 2.0F;
+    // タイミング定数はサーバー側の当たり判定と共有 (SpkPetEntity)
+    private static final float[] PUMPKIN_POS_Z_TICKS = {0.0F, SpkPetEntity.PUMPKIN_THRUST_END_TICK};
+    private static final float[] PUMPKIN_POS_Z_VALS  = {SpkPetEntity.PUMPKIN_THRUST_START_Z, SpkPetEntity.PUMPKIN_THRUST_END_Z};
+    private static final float PUMPKIN_SCALE = 2.0F;
 
     private static float sampleLinear(float[] ticks, float[] vals, float t) {
         if (t <= ticks[0]) {
@@ -178,7 +177,7 @@ public class SpkPetModel<T extends SpkPetEntity> extends EntityModel<T> {
 
         // 攻撃モーション（カボチャ突進）
         if (entity.isPumpkinAttacking()) {
-            float t = Mth.clamp(ageInTicks - entity.getPumpkinAttackStartTick(), 0.0F, ATTACK_DURATION_TICKS);
+            float t = Mth.clamp(ageInTicks - entity.getPumpkinAttackStartTick(), 0.0F, SpkPetEntity.PUMPKIN_ATTACK_DURATION_TICKS);
 
             // allall: 前方へ突進
             this.allall.z += sampleLinear(ALLALL_Z_TICKS, ALLALL_Z_VALS, t);
@@ -191,7 +190,7 @@ public class SpkPetModel<T extends SpkPetEntity> extends EntityModel<T> {
             // pumpkin: 横から構えて前に突き出す
             this.pumpkin.x += 7.2F; // Blockbench x=-7.2 は符号反転
             this.pumpkin.z += sampleLinear(PUMPKIN_POS_Z_TICKS, PUMPKIN_POS_Z_VALS, t);
-            float pumpkinScale = (t >= PUMPKIN_APPEAR_TICK && t < PUMPKIN_HIDE_TICK) ? PUMPKIN_SCALE : 0.0F;
+            float pumpkinScale = (t >= SpkPetEntity.PUMPKIN_APPEAR_TICK && t < SpkPetEntity.PUMPKIN_HIDE_TICK) ? PUMPKIN_SCALE : 0.0F;
             this.pumpkin.xScale = pumpkinScale;
             this.pumpkin.yScale = pumpkinScale;
             this.pumpkin.zScale = pumpkinScale;
