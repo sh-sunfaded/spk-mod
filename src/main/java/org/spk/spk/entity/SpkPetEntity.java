@@ -338,6 +338,15 @@ public class SpkPetEntity extends TamableAnimal {
         return null;
     }
 
+    @Override
+    protected float getSoundVolume() {
+        DamageSource lastDamage = this.getLastDamageSource();
+        if (lastDamage != null && lastDamage.is(DamageTypeTags.IS_EXPLOSION)) {
+            return 2.0F;
+        }
+        return super.getSoundVolume();
+    }
+
     // ----------------------------------------------------------------
     //  繁殖なし
     // ----------------------------------------------------------------

@@ -21,7 +21,10 @@
     "category": "neutral",
     "subtitle": "subtitles.entity.spk_pet.death_explode",
     "sounds": [
-      "spk:death_bazeyo"
+      {
+        "name": "spk:death_bazeyo",
+        "volume": 2.0
+      }
     ]
   },
   "entity.spk_pet.squash": {
