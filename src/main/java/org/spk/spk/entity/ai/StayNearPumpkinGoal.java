@@ -107,6 +107,15 @@ public class StayNearPumpkinGoal extends Goal {
 
     @Nullable
     private BlockPos findNearestPumpkin() {
+        // 登録カボチャがまだ存在するなら最優先で守る（スピキが離れていても登録先へ戻る）
+        BlockPos registered = this.mob.getRegisteredPumpkinPos();
+        if (registered != null) {
+            BlockState registeredState = this.mob.level().getBlockState(registered);
+            if (registeredState.is(Blocks.PUMPKIN) || registeredState.is(Blocks.CARVED_PUMPKIN)) {
+                return registered;
+            }
+        }
+
         BlockPos currentPos = this.mob.blockPosition();
         BlockPos nearest = null;
         double nearestDistSq = Double.MAX_VALUE;

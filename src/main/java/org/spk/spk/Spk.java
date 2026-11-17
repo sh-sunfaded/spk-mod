@@ -4,6 +4,9 @@ import com.mojang.logging.LogUtils;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.food.FoodProperties;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.CreativeModeTab;
@@ -12,12 +15,14 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.SpawnEggItem;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.material.MapColor;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.EntityRenderersEvent;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.BuildCreativeModeTabContentsEvent;
+import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 import net.minecraftforge.event.server.ServerStartingEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -151,6 +156,52 @@ public class Spk {
     @SubscribeEvent
     public void onServerStarting(ServerStartingEvent event) {
         LOGGER.info("HELLO from server starting");
+    }
+
+    /**
+     * カボチャのスピキへの登録：
+     * スニーク + 素手でカボチャ（通常 / くり抜き）ブロックを右クリックすると、
+     * 32ブロック以内にいる自分のテイム済みスピキのうち最も近い個体に、
+     * そのカボチャを登録（上書き）する。登録されたスピキはそのカボチャを守る。
+     */
+    @SubscribeEvent
+    public void onPumpkinRegisterClick(PlayerInteractEvent.RightClickBlock event) {
+        Level level = event.getLevel();
+        if (level.isClientSide() || event.getHand() != InteractionHand.MAIN_HAND) {
+            return;
+        }
+
+        var state = level.getBlockState(event.getPos());
+        if (!(state.is(Blocks.PUMPKIN) || state.is(Blocks.CARVED_PUMPKIN))) {
+            return;
+        }
+
+        Player player = event.getEntity();
+        if (!player.isShiftKeyDown() || !event.getItemStack().isEmpty()) {
+            return;
+        }
+
+        java.util.List<SpkPetEntity> pets = level.getEntitiesOfClass(
+                SpkPetEntity.class,
+                player.getBoundingBox().inflate(32.0D),
+                pet -> pet.isOwnedBy(player));
+
+        SpkPetEntity nearest = null;
+        double nearestDistSq = Double.MAX_VALUE;
+        for (SpkPetEntity pet : pets) {
+            double distSq = player.distanceToSqr(pet);
+            if (distSq < nearestDistSq) {
+                nearestDistSq = distSq;
+                nearest = pet;
+            }
+        }
+        if (nearest == null) {
+            return; // 登録できるスピキがいなければバニラの挙動に任せる
+        }
+
+        nearest.registerPumpkin(event.getPos());
+        event.setCanceled(true);
+        event.setCancellationResult(InteractionResult.SUCCESS);
     }
 
     @Mod.EventBusSubscriber(modid = MODID, bus = Mod.EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)

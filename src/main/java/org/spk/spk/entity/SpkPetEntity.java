@@ -1,5 +1,6 @@
 package org.spk.spk.entity;
 
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
@@ -11,7 +12,9 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.AgeableMob;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.TamableAnimal;
 import org.spk.spk.Spk;
@@ -51,6 +54,18 @@ public class SpkPetEntity extends TamableAnimal {
     public static final byte EVENT_RAINBOW_SPIN = 68;
     private static final int RAINBOW_SPIN_DURATION = 60; // 3秒間 (60 ticks)
     private int rainbowSpinTicks = 0;
+
+    // --- カボチャ攻撃モーション（Blockbench「ホバギ突進」）用定数 ---
+    public static final byte EVENT_PUMPKIN_ATTACK = 69;
+    public static final float PUMPKIN_ATTACK_DURATION_TICKS = 41.0F; // 2.04167秒
+    private float pumpkinAttackStartTick = -PUMPKIN_ATTACK_DURATION_TICKS;
+
+    // --- カボチャの登録（テリトリー）---
+    // 登録されたカボチャの周囲に敵モブ・村人が近づくと攻撃する。
+    // 未登録 / カボチャが消失 / スピキが離れている場合は一切攻撃しない。
+    private static final double PUMPKIN_NEAR_RANGE = 16.0D;   // スピキが登録カボチャの近くとみなす距離
+    @Nullable
+    private BlockPos registeredPumpkinPos = null;
 
     public SpkPetEntity(EntityType<? extends SpkPetEntity> type, Level level) {
         super(type, level);
@@ -122,7 +137,8 @@ public class SpkPetEntity extends TamableAnimal {
         return Mob.createMobAttributes()
                 .add(Attributes.MAX_HEALTH, WILD_HEALTH)
                 .add(Attributes.MOVEMENT_SPEED, 0.3D)
-                .add(Attributes.ATTACK_DAMAGE, 2.0D);
+                .add(Attributes.ATTACK_DAMAGE, 2.0D)
+                .add(Attributes.FOLLOW_RANGE, 24.0D);
     }
 
     // ----------------------------------------------------------------
@@ -146,6 +162,88 @@ public class SpkPetEntity extends TamableAnimal {
         this.targetSelector.addGoal(1, new OwnerHurtByTargetGoal(this));
         this.targetSelector.addGoal(2, new OwnerHurtTargetGoal(this));
         this.targetSelector.addGoal(3, new HurtByTargetGoal(this).setAlertOthers());
+        // 登録カボチャの防衛：カボチャに近づく敵モブ・村人
+        this.targetSelector.addGoal(4, new org.spk.spk.entity.ai.GuardPumpkinTargetGoal(this));
+    }
+
+    // ----------------------------------------------------------------
+    //  カボチャの登録（テリトリー）
+    // ----------------------------------------------------------------
+    /**
+     * カボチャをこのスピキに登録する。既存の登録は上書きされる。
+     */
+    public void registerPumpkin(BlockPos pos) {
+        this.registeredPumpkinPos = pos.immutable();
+        this.setTarget(null);
+        this.getNavigation().stop();
+        if (!this.level().isClientSide) {
+            this.level().broadcastEntityEvent(this, (byte) 7); // ハートパーティクル
+            this.playSound(SoundEvents.AMETHYST_BLOCK_CHIME, 1.0F, 1.2F);
+        }
+    }
+
+    @Nullable
+    public BlockPos getRegisteredPumpkinPos() {
+        return this.registeredPumpkinPos;
+    }
+
+    /**
+     * 登録が有効ならその座標を、無効なら null を返す。
+     * 有効条件：登録カボチャがまだブロックとして存在し、かつスピキがその近くにいる。
+     */
+    @Nullable
+    public BlockPos getValidPumpkinPos() {
+        if (this.registeredPumpkinPos == null) {
+            return null;
+        }
+        var state = this.level().getBlockState(this.registeredPumpkinPos);
+        if (!state.is(net.minecraft.world.level.block.Blocks.PUMPKIN)
+                && !state.is(net.minecraft.world.level.block.Blocks.CARVED_PUMPKIN)) {
+            return null;
+        }
+        if (this.distanceToSqr(
+                this.registeredPumpkinPos.getX() + 0.5D,
+                this.registeredPumpkinPos.getY() + 0.5D,
+                this.registeredPumpkinPos.getZ() + 0.5D) > PUMPKIN_NEAR_RANGE * PUMPKIN_NEAR_RANGE) {
+            return null;
+        }
+        return this.registeredPumpkinPos;
+    }
+
+    /**
+     * 攻撃（ターゲット設定）は、カボチャがスピキに登録されている場合のみ許可する。
+     */
+    @Override
+    public void setTarget(@Nullable LivingEntity target) {
+        if (target != null && this.getValidPumpkinPos() == null) {
+            return;
+        }
+        super.setTarget(target);
+    }
+
+    /**
+     * 周囲の最寄りカボチャを探す。
+     */
+    @Nullable
+    public BlockPos findNearestPumpkin(int radius, int yRadius) {
+        BlockPos currentPos = this.blockPosition();
+        BlockPos nearest = null;
+        double nearestDistSq = Double.MAX_VALUE;
+
+        for (BlockPos checkPos : BlockPos.betweenClosed(
+                currentPos.offset(-radius, -yRadius, -radius),
+                currentPos.offset(radius, yRadius, radius))) {
+            var state = this.level().getBlockState(checkPos);
+            if (state.is(net.minecraft.world.level.block.Blocks.PUMPKIN)
+                    || state.is(net.minecraft.world.level.block.Blocks.CARVED_PUMPKIN)) {
+                double distSq = currentPos.distSqr(checkPos);
+                if (distSq < nearestDistSq) {
+                    nearestDistSq = distSq;
+                    nearest = checkPos.immutable();
+                }
+            }
+        }
+        return nearest;
     }
 
     // ----------------------------------------------------------------
@@ -182,18 +280,59 @@ public class SpkPetEntity extends TamableAnimal {
         return this.rainbowSpinTicks;
     }
 
+    // ----------------------------------------------------------------
+    //  カボチャ攻撃モーションの発火・管理
+    // ----------------------------------------------------------------
+    public void triggerPumpkinAttack() {
+        this.pumpkinAttackStartTick = this.tickCount;
+        if (!this.level().isClientSide) {
+            this.level().broadcastEntityEvent(this, EVENT_PUMPKIN_ATTACK);
+        }
+    }
+
+    public boolean isPumpkinAttacking() {
+        return this.tickCount - this.pumpkinAttackStartTick < PUMPKIN_ATTACK_DURATION_TICKS;
+    }
+
+    public float getPumpkinAttackStartTick() {
+        return this.pumpkinAttackStartTick;
+    }
+
     @Override
     public void handleEntityEvent(byte id) {
-        if (id == EVENT_RAINBOW_SPIN) {
+        if (id == EVENT_PUMPKIN_ATTACK) {
+            this.triggerPumpkinAttack();
+        } else if (id == EVENT_RAINBOW_SPIN) {
             this.triggerRainbowSpin();
         } else {
             super.handleEntityEvent(id);
         }
     }
 
+    // ----------------------------------------------------------------
+    //  近接攻撃：カボチャ突進モーションを再生（威力は狼の噛みつき相当）
+    // ----------------------------------------------------------------
+    @Override
+    public boolean doHurtTarget(Entity target) {
+        if (!this.level().isClientSide) {
+            this.playSound(Spk.SPK_PET_SQUASH.get(), 1.0F, 0.8F);
+            this.triggerPumpkinAttack();
+        }
+        return super.doHurtTarget(target);
+    }
+
     @Override
     public void aiStep() {
         super.aiStep();
+        // 登録カボチャが破壊されていたら登録を解除（以降は攻撃しない）
+        if (!this.level().isClientSide && this.tickCount % 20 == 0 && this.registeredPumpkinPos != null) {
+            var state = this.level().getBlockState(this.registeredPumpkinPos);
+            if (!state.is(net.minecraft.world.level.block.Blocks.PUMPKIN)
+                    && !state.is(net.minecraft.world.level.block.Blocks.CARVED_PUMPKIN)) {
+                this.registeredPumpkinPos = null;
+                this.setTarget(null);
+            }
+        }
         if (this.rainbowSpinTicks > 0) {
             this.rainbowSpinTicks--;
             if (this.level().isClientSide) {
@@ -271,6 +410,11 @@ public class SpkPetEntity extends TamableAnimal {
                 this.tame(player);
                 this.navigation.stop();
                 this.setTarget(null);
+                // テイムした場所の近くにあるカボチャを登録
+                BlockPos tamePumpkin = this.findNearestPumpkin(16, 4);
+                if (tamePumpkin != null) {
+                    this.registeredPumpkinPos = tamePumpkin;
+                }
                 this.level().broadcastEntityEvent(this, (byte) 7); // ハートパーティクル
                 this.playSound(SoundEvents.AMETHYST_BLOCK_CHIME, 1.0F, 1.5F);
                 this.playSound(Spk.SPK_PET_SQUASH.get(), 1.0F, 1.0F);
@@ -362,10 +506,16 @@ public class SpkPetEntity extends TamableAnimal {
     @Override
     public void addAdditionalSaveData(CompoundTag tag) {
         super.addAdditionalSaveData(tag);
+        if (this.registeredPumpkinPos != null) {
+            tag.putLong("RegisteredPumpkin", this.registeredPumpkinPos.asLong());
+        }
     }
 
     @Override
     public void readAdditionalSaveData(CompoundTag tag) {
         super.readAdditionalSaveData(tag);
+        if (tag.contains("RegisteredPumpkin")) {
+            this.registeredPumpkinPos = BlockPos.of(tag.getLong("RegisteredPumpkin"));
+        }
     }
 }
