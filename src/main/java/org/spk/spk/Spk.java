@@ -200,6 +200,10 @@ public class Spk {
         }
 
         nearest.registerPumpkin(event.getPos());
+        if (!level.isClientSide()) {
+            level.broadcastEntityEvent(nearest, (byte) 7); // ハートパーティクル
+            nearest.playSound(net.minecraft.sounds.SoundEvents.AMETHYST_BLOCK_CHIME, 1.0F, 1.2F);
+        }
         event.setCanceled(true);
         event.setCancellationResult(InteractionResult.SUCCESS);
     }

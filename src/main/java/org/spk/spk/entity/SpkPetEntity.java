@@ -40,6 +40,7 @@ import net.minecraftforge.event.ForgeEventFactory;
 import org.joml.Vector3f;
 
 import javax.annotation.Nullable;
+import java.util.List;
 
 public class SpkPetEntity extends TamableAnimal {
 
@@ -60,12 +61,14 @@ public class SpkPetEntity extends TamableAnimal {
     public static final float PUMPKIN_ATTACK_DURATION_TICKS = 41.0F; // 2.04167秒
     private float pumpkinAttackStartTick = -PUMPKIN_ATTACK_DURATION_TICKS;
 
-    // --- カボチャの登録（テリトリー）---
-    // 登録されたカボチャの周囲に敵モブ・村人が近づくと攻撃する。
-    // 未登録 / カボチャが消失 / スピキが離れている場合は一切攻撃しない。
-    private static final double PUMPKIN_NEAR_RANGE = 16.0D;   // スピキが登録カボチャの近くとみなす距離
-    @Nullable
-    private BlockPos registeredPumpkinPos = null;
+    // --- ホバギ（カボチャ）登録 ---
+    // スピキは近隣のカボチャの座標を記録する。ワールドに存在する限り保持され、
+    // 記録したカボチャの近くで行動し、その防衛（敵モブ・村人の排除）も行う。
+    private static final double PUMPKIN_NEAR_RANGE = 16.0D;   // 防衛を行う距離（スピキと登録カボチャの距離）
+    private static final int PUMPKIN_MEMORY_LIMIT = 16;       // 記録できるカボチャの上限
+    private static final int PUMPKIN_SCAN_RADIUS = 8;         // 自動記録の探索半径（横）
+    private static final int PUMPKIN_SCAN_Y_RADIUS = 2;       // 自動記録の探索半径（縦）
+    private final java.util.List<BlockPos> registeredPumpkins = new java.util.ArrayList<>(); // 新しいものが先頭
 
     public SpkPetEntity(EntityType<? extends SpkPetEntity> type, Level level) {
         super(type, level);
@@ -167,47 +170,100 @@ public class SpkPetEntity extends TamableAnimal {
     }
 
     // ----------------------------------------------------------------
-    //  カボチャの登録（テリトリー）
+    //  ホバギ（カボチャ）の登録・管理
     // ----------------------------------------------------------------
     /**
-     * カボチャをこのスピキに登録する。既存の登録は上書きされる。
+     * カボチャの座標をスピキに登録する。
+     * 重複登録はせず、上限に達したら一番古い記録を破棄する（新しいものほど先頭）。
      */
     public void registerPumpkin(BlockPos pos) {
-        this.registeredPumpkinPos = pos.immutable();
-        this.setTarget(null);
-        this.getNavigation().stop();
-        if (!this.level().isClientSide) {
-            this.level().broadcastEntityEvent(this, (byte) 7); // ハートパーティクル
-            this.playSound(SoundEvents.AMETHYST_BLOCK_CHIME, 1.0F, 1.2F);
+        BlockPos immutable = pos.immutable();
+        this.registeredPumpkins.remove(immutable);
+        while (this.registeredPumpkins.size() >= PUMPKIN_MEMORY_LIMIT) {
+            this.registeredPumpkins.remove(this.registeredPumpkins.size() - 1);
         }
-    }
-
-    @Nullable
-    public BlockPos getRegisteredPumpkinPos() {
-        return this.registeredPumpkinPos;
+        this.registeredPumpkins.add(0, immutable);
     }
 
     /**
-     * 登録が有効ならその座標を、無効なら null を返す。
-     * 有効条件：登録カボチャがまだブロックとして存在し、かつスピキがその近くにいる。
+     * 登録済みカボチャの座標一覧（操作不可）。
+     */
+    public java.util.List<BlockPos> getRegisteredPumpkins() {
+        return java.util.Collections.unmodifiableList(this.registeredPumpkins);
+    }
+
+    /**
+     * まだワールドに存在する（ブロックが残っている）登録カボチャのみを返す。
+     */
+    public java.util.List<BlockPos> getValidPumpkins() {
+        java.util.List<BlockPos> valid = new java.util.ArrayList<>(this.registeredPumpkins.size());
+        for (BlockPos pos : this.registeredPumpkins) {
+            var state = this.level().getBlockState(pos);
+            if (state.is(net.minecraft.world.level.block.Blocks.PUMPKIN)
+                    || state.is(net.minecraft.world.level.block.Blocks.CARVED_PUMPKIN)) {
+                valid.add(pos);
+            }
+        }
+        return valid;
+    }
+
+    /**
+     * 有効な登録カボチャのうち、スピキから最も近いものを返す。
      */
     @Nullable
-    public BlockPos getValidPumpkinPos() {
-        if (this.registeredPumpkinPos == null) {
+    public BlockPos getNearestValidPumpkin() {
+        BlockPos best = null;
+        double bestDistSq = Double.MAX_VALUE;
+        for (BlockPos pos : this.getValidPumpkins()) {
+            double distSq = this.distanceToSqr(
+                    pos.getX() + 0.5D, pos.getY() + 0.5D, pos.getZ() + 0.5D);
+            if (distSq < bestDistSq) {
+                bestDistSq = distSq;
+                best = pos;
+            }
+        }
+        return best;
+    }
+
+    /**
+     * 防衛対象となるカボチャを返す。
+     * スピキが登録カボチャの近くにいない場合は null（＝攻撃は行わない）。
+     */
+    @Nullable
+    public BlockPos getNearestGuardPumpkin() {
+        BlockPos nearest = this.getNearestValidPumpkin();
+        if (nearest == null) {
             return null;
         }
-        var state = this.level().getBlockState(this.registeredPumpkinPos);
-        if (!state.is(net.minecraft.world.level.block.Blocks.PUMPKIN)
-                && !state.is(net.minecraft.world.level.block.Blocks.CARVED_PUMPKIN)) {
-            return null;
+        double distSq = this.distanceToSqr(
+                nearest.getX() + 0.5D, nearest.getY() + 0.5D, nearest.getZ() + 0.5D);
+        return distSq <= PUMPKIN_NEAR_RANGE * PUMPKIN_NEAR_RANGE ? nearest : null;
+    }
+
+    /**
+     * 登録の維持（サーバー側・定期実行）：
+     * ワールドから消えたカボチャの記録を破棄し、近隣のカボチャを新たに記録する。
+     */
+    private void maintainPumpkinRegistrations() {
+        // ワールドから消えたカボチャの記録を破棄
+        this.registeredPumpkins.removeIf(pos -> {
+            var state = this.level().getBlockState(pos);
+            return !state.is(net.minecraft.world.level.block.Blocks.PUMPKIN)
+                    && !state.is(net.minecraft.world.level.block.Blocks.CARVED_PUMPKIN);
+        });
+
+        // 近隣のカボチャを新たに記録
+        BlockPos center = this.blockPosition();
+        for (BlockPos checkPos : BlockPos.betweenClosed(
+                center.offset(-PUMPKIN_SCAN_RADIUS, -PUMPKIN_SCAN_Y_RADIUS, -PUMPKIN_SCAN_RADIUS),
+                center.offset(PUMPKIN_SCAN_RADIUS, PUMPKIN_SCAN_Y_RADIUS, PUMPKIN_SCAN_RADIUS))) {
+            var state = this.level().getBlockState(checkPos);
+            if ((state.is(net.minecraft.world.level.block.Blocks.PUMPKIN)
+                    || state.is(net.minecraft.world.level.block.Blocks.CARVED_PUMPKIN))
+                    && !this.registeredPumpkins.contains(checkPos)) {
+                this.registerPumpkin(checkPos);
+            }
         }
-        if (this.distanceToSqr(
-                this.registeredPumpkinPos.getX() + 0.5D,
-                this.registeredPumpkinPos.getY() + 0.5D,
-                this.registeredPumpkinPos.getZ() + 0.5D) > PUMPKIN_NEAR_RANGE * PUMPKIN_NEAR_RANGE) {
-            return null;
-        }
-        return this.registeredPumpkinPos;
     }
 
     /**
@@ -215,7 +271,7 @@ public class SpkPetEntity extends TamableAnimal {
      */
     @Override
     public void setTarget(@Nullable LivingEntity target) {
-        if (target != null && this.getValidPumpkinPos() == null) {
+        if (target != null && this.getNearestGuardPumpkin() == null) {
             return;
         }
         super.setTarget(target);
@@ -324,14 +380,9 @@ public class SpkPetEntity extends TamableAnimal {
     @Override
     public void aiStep() {
         super.aiStep();
-        // 登録カボチャが破壊されていたら登録を解除（以降は攻撃しない）
-        if (!this.level().isClientSide && this.tickCount % 20 == 0 && this.registeredPumpkinPos != null) {
-            var state = this.level().getBlockState(this.registeredPumpkinPos);
-            if (!state.is(net.minecraft.world.level.block.Blocks.PUMPKIN)
-                    && !state.is(net.minecraft.world.level.block.Blocks.CARVED_PUMPKIN)) {
-                this.registeredPumpkinPos = null;
-                this.setTarget(null);
-            }
+        // 登録の維持：消えたカボチャの記録破棄 + 近隣カボチャの自動記録（5秒毎）
+        if (!this.level().isClientSide && this.isTame() && this.tickCount % 100 == 0) {
+            this.maintainPumpkinRegistrations();
         }
         if (this.rainbowSpinTicks > 0) {
             this.rainbowSpinTicks--;
@@ -413,7 +464,7 @@ public class SpkPetEntity extends TamableAnimal {
                 // テイムした場所の近くにあるカボチャを登録
                 BlockPos tamePumpkin = this.findNearestPumpkin(16, 4);
                 if (tamePumpkin != null) {
-                    this.registeredPumpkinPos = tamePumpkin;
+                    this.registerPumpkin(tamePumpkin);
                 }
                 this.level().broadcastEntityEvent(this, (byte) 7); // ハートパーティクル
                 this.playSound(SoundEvents.AMETHYST_BLOCK_CHIME, 1.0F, 1.5F);
@@ -506,16 +557,28 @@ public class SpkPetEntity extends TamableAnimal {
     @Override
     public void addAdditionalSaveData(CompoundTag tag) {
         super.addAdditionalSaveData(tag);
-        if (this.registeredPumpkinPos != null) {
-            tag.putLong("RegisteredPumpkin", this.registeredPumpkinPos.asLong());
+        // 登録カボチャの座標を保存（ワールドに存在する限り保持）
+        List<BlockPos> pumpkins = this.registeredPumpkins;
+        if (!pumpkins.isEmpty()) {
+            long[] coords = new long[pumpkins.size()];
+            for (int i = 0; i < pumpkins.size(); i++) {
+                coords[i] = pumpkins.get(i).asLong();
+            }
+            tag.putLongArray("RegisteredPumpkins", coords);
         }
     }
 
     @Override
     public void readAdditionalSaveData(CompoundTag tag) {
         super.readAdditionalSaveData(tag);
-        if (tag.contains("RegisteredPumpkin")) {
-            this.registeredPumpkinPos = BlockPos.of(tag.getLong("RegisteredPumpkin"));
+        this.registeredPumpkins.clear();
+        if (tag.contains("RegisteredPumpkins")) {
+            for (long coord : tag.getLongArray("RegisteredPumpkins")) {
+                this.registerPumpkin(BlockPos.of(coord));
+            }
+        } else if (tag.contains("RegisteredPumpkin")) {
+            // 旧形式（単一登録）からの移行
+            this.registeredPumpkins.add(BlockPos.of(tag.getLong("RegisteredPumpkin")));
         }
     }
 }

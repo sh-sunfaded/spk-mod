@@ -107,13 +107,11 @@ public class StayNearPumpkinGoal extends Goal {
 
     @Nullable
     private BlockPos findNearestPumpkin() {
-        // 登録カボチャがまだ存在するなら最優先で守る（スピキが離れていても登録先へ戻る）
-        BlockPos registered = this.mob.getRegisteredPumpkinPos();
+        // 登録カボチャ（まだワールドに存在するもの）を最優先で守る。
+        // スピキが離れていても登録先へ戻り、近くで行動する。
+        BlockPos registered = this.mob.getNearestValidPumpkin();
         if (registered != null) {
-            BlockState registeredState = this.mob.level().getBlockState(registered);
-            if (registeredState.is(Blocks.PUMPKIN) || registeredState.is(Blocks.CARVED_PUMPKIN)) {
-                return registered;
-            }
+            return registered;
         }
 
         BlockPos currentPos = this.mob.blockPosition();
